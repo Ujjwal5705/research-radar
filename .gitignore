@@ -1,0 +1,23 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/.pytest_cache/
+
+# Env files
+.env
+backend/.env
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Data dumps (never commit raw data)
+*.csv
+*.json.gz
+backend/data_dumps/
+
+# OS
+.DS_Store
