@@ -45,7 +45,7 @@ def summarize_abstract(abstract: str, client: Groq | None = None) -> str:
             {"role": "user", "content": abstract},
         ],
         temperature=0.3,
-        max_tokens=300,
+        max_tokens=512,
     )
     content = response.choices[0].message.content
     if not content:
