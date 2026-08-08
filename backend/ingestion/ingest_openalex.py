@@ -52,14 +52,22 @@ def reconstruct_abstract(inverted_index: dict | None) -> str | None:
 
 
 def fetch_papers_for_topic(client: httpx.Client, topic: str, limit: int) -> list[dict]:
-    """Cursor-paginate through OpenAlex 'works' filtered by topic and recency."""
+    """Cursor-paginate through OpenAlex 'works' filtered by topic and recency.
+
+    Bounds both ends of the date range: OpenAlex includes "forthcoming" /
+    in-press articles with future placeholder publication dates, and since
+    we sort by publication_date:desc those would otherwise dominate the
+    top of "recent" results. Capping to_publication_date at today excludes
+    them so results are genuinely already-published recent papers.
+    """
     since = (date.today() - timedelta(days=LOOKBACK_DAYS)).isoformat()
+    until = date.today().isoformat()
     results: list[dict] = []
     cursor = "*"
 
     while len(results) < limit and cursor:
         params = {
-            "filter": f"default.search:{topic},from_publication_date:{since}",
+            "filter": f"default.search:{topic},from_publication_date:{since},to_publication_date:{until}",
             "sort": "publication_date:desc",
             "per-page": min(PER_PAGE, limit - len(results)),
             "cursor": cursor,
@@ -70,17 +78,29 @@ def fetch_papers_for_topic(client: httpx.Client, topic: str, limit: int) -> list
             params["api_key"] = settings.openalex_api_key
 
         data = None
+        last_error = None
         for attempt in range(1, MAX_RETRIES + 1):
             resp = client.get(OPENALEX_BASE_URL, params=params, timeout=REQUEST_TIMEOUT)
             if resp.status_code == 200:
                 data = resp.json()
                 break
             if resp.status_code in (429, 500, 502, 503) and attempt < MAX_RETRIES:
+                print(
+                    f"  [{topic}] got HTTP {resp.status_code}, retrying "
+                    f"(attempt {attempt}/{MAX_RETRIES})..."
+                )
                 time.sleep(2**attempt)
                 continue
-            resp.raise_for_status()
+            # Non-retryable error, or retries exhausted: surface it loudly
+            # instead of silently returning a partial/empty result set.
+            last_error = f"HTTP {resp.status_code}: {resp.text[:500]}"
+            break
 
         if data is None:
+            print(
+                f"  [{topic}] FAILED to fetch after {MAX_RETRIES} attempts. "
+                f"Last error: {last_error}. Got {len(results)} papers before failing."
+            )
             break
 
         batch = data.get("results", [])
@@ -117,24 +137,35 @@ def get_or_create_topic(db, name: str) -> Topic:
 
 def replace_paper_authors(db, paper: Paper, authorships: list[dict]) -> None:
     """Fully rebuild this paper's author links in correct order. Idempotent:
-    re-running with the same authorship data produces the same end state."""
+    re-running with the same authorship data produces the same end state.
+
+    Note: OpenAlex can list the same author more than once in `authorships`
+    - one entry per institutional affiliation - so we de-duplicate by
+    author id, keeping the first (earliest-position) occurrence.
+    """
     for link in list(paper.author_links):
         db.delete(link)
     db.flush()
 
-    for position, authorship in enumerate(authorships):
+    seen_author_ids: set[str] = set()
+    position = 0
+    for authorship in authorships:
         author_info = authorship.get("author") or {}
         raw_id = author_info.get("id")
         name = author_info.get("display_name")
         if not raw_id or not name:
             continue
         openalex_author_id = raw_id.rstrip("/").split("/")[-1]
+        if openalex_author_id in seen_author_ids:
+            continue
+        seen_author_ids.add(openalex_author_id)
         author = get_or_create_author(db, openalex_author_id, name)
         db.add(
             PaperAuthor(
                 paper_id=paper.id, author_id=author.id, author_position=position
             )
         )
+        position += 1
     db.flush()
 
 
