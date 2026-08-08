@@ -56,9 +56,12 @@ def fetch_papers_for_topic(client: httpx.Client, topic: str, limit: int) -> list
 
     Bounds both ends of the date range: OpenAlex includes "forthcoming" /
     in-press articles with future placeholder publication dates, and since
-    we sort by publication_date:desc those would otherwise dominate the
-    top of "recent" results. Capping to_publication_date at today excludes
-    them so results are genuinely already-published recent papers.
+    ML/robotics publish thousands of papers a month, sorting purely by
+    recency means every result ends up from the last few weeks with zero
+    citations (too new to have been cited yet). Instead we sort by citation
+    count within the (bounded, still "recent" - last 2 years) date window,
+    which surfaces a more representative, demo-able mix of papers while
+    still satisfying "recent" via the from/to date filter itself.
     """
     since = (date.today() - timedelta(days=LOOKBACK_DAYS)).isoformat()
     until = date.today().isoformat()
@@ -68,7 +71,7 @@ def fetch_papers_for_topic(client: httpx.Client, topic: str, limit: int) -> list
     while len(results) < limit and cursor:
         params = {
             "filter": f"default.search:{topic},from_publication_date:{since},to_publication_date:{until}",
-            "sort": "publication_date:desc",
+            "sort": "cited_by_count:desc",
             "per-page": min(PER_PAGE, limit - len(results)),
             "cursor": cursor,
             "select": "id,title,display_name,abstract_inverted_index,"

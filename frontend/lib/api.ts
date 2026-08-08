@@ -16,9 +16,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE_URL}${path}`, init);
-  } catch {
-    // Network-level failure (backend down, CORS, DNS, etc.) - no HTTP
-    // response at all, so we can't read a status code or detail message.
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw err;
+    }
     throw new ApiError(0, "Could not reach the server. Is the API running?");
   }
 
