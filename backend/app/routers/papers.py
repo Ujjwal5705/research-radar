@@ -1,11 +1,15 @@
 import math
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app import crud
 from app.database import get_db
-from app.schemas import PaginatedPapers, PaperDetailOut
+from app.schemas import PaginatedPapers, PaperDetailOut, SummaryOut
+from app.ai.summarize import summarize_abstract
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 
@@ -41,3 +45,33 @@ def get_paper(paper_id: int, db: Session = Depends(get_db)):
     if paper is None:
         raise HTTPException(status_code=404, detail="Paper not found")
     return crud.to_detail(paper)
+
+
+@router.post("/{paper_id}/summarize", response_model=SummaryOut)
+def summarize_paper(paper_id: int, db: Session = Depends(get_db)):
+    paper = crud.get_paper(db, paper_id)
+    if paper is None:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    if not paper.abstract or not paper.abstract.strip():
+        raise HTTPException(
+            status_code=422, detail="This paper has no abstract to summarize."
+        )
+
+    try:
+        summary = summarize_abstract(paper.abstract)
+    except RuntimeError as e:
+        # Missing API key or empty model response - a config/setup problem.
+        logger.error("Summarize config error for paper %s: %s", paper_id, e)
+        raise HTTPException(
+            status_code=503, detail="AI summarization is not configured correctly."
+        )
+    except Exception as e:
+        # Groq API errors (rate limit, network, etc.) - transient, retryable.
+        logger.error("Summarize failed for paper %s: %s", paper_id, e)
+        raise HTTPException(
+            status_code=502,
+            detail="AI summarization service is currently unavailable. Please try again.",
+        )
+
+    return SummaryOut(summary=summary)
