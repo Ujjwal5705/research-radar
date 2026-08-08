@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+/*
+  Research Radar palette: warm "paper" background with near-black ink text
+  and a deep academic-navy accent - evokes a journal/reading-room feel
+  without leaning on the generic cream+terracotta or dark+neon defaults.
+*/
+:root {
+  --color-paper: #f7f5ef;
+  --color-paper-raised: #ffffff;
+  --color-ink: #201f1b;
+  --color-ink-muted: #6b6a62;
+  --color-border: #e0dccd;
+  --color-accent: #2b4570;
+  --color-accent-hover: #1e3355;
+  --color-accent-soft: #e7ecf3;
+  --color-error: #a3342b;
+  --color-error-soft: #f6e9e7;
+}
+
+@theme inline {
+  --color-paper: var(--color-paper);
+  --color-paper-raised: var(--color-paper-raised);
+  --color-ink: var(--color-ink);
+  --color-ink-muted: var(--color-ink-muted);
+  --color-border: var(--color-border);
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-accent-soft: var(--color-accent-soft);
+  --color-error: var(--color-error);
+  --color-error-soft: var(--color-error-soft);
+  --font-serif: var(--font-source-serif);
+  --font-sans: var(--font-inter);
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
