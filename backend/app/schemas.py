@@ -49,3 +49,7 @@ class PaginatedPapers(BaseModel):
     page_size: int
     total_pages: int
     results: list[PaperSummaryOut]
+
+
+class SummaryOut(BaseModel):
+    summary: str
